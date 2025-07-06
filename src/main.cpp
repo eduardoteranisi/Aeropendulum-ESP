@@ -6,8 +6,8 @@
 #define POTENCIOMETER 32
 
 //LIMITS TO MAINTAIN THE AEROPENDULUM
-#define UPPER_LIMIT -25
-#define LOWER_LIMIT 13
+#define UPPER_LIMIT 109
+#define LOWER_LIMIT 77
 
 //FUNCTION DECLARATIONS
 float convertToDegrees(int analog_result);
@@ -31,7 +31,7 @@ void loop() {
   }
 
   float degree = convertToDegrees(potenciometer_value);
-  if(degree < -90 || degree > 90) {
+  if(degree < 0 || degree > 180) {
     Serial.println("Invalid degree value!");
     return;
   }
@@ -50,14 +50,14 @@ void loop() {
 
 //FUNCTION LOGICS
 float convertToDegrees(int analog_result){
-  float degrees = map(analog_result, 0, 4095, -90, 90);  // -90° to +90°
+  float degrees = map(analog_result, 0, 4095, 0, 180);  // 0° to 180°
 
   return degrees;
 }
 
 int checkLimit(float degree_to_check){
-  if(degree_to_check <= UPPER_LIMIT) return 1;
-  if(degree_to_check >= LOWER_LIMIT) return -1;
+  if(degree_to_check >= UPPER_LIMIT) return 1;
+  if(degree_to_check <= LOWER_LIMIT) return -1;
 
   return 0;
 }
