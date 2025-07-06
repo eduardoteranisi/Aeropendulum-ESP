@@ -70,21 +70,33 @@ void loop() {
   if (checker == 1) {
     Serial.println("Upper limit reached! Slowing down...");
 
-    for(int i = motor_speed; i >= 125; i--) {
-      setPWM(i);
-      delay(10);
-    }
+    while(checker == 1) {
+      for(int i = motor_speed; i >= 125; i--) {
+        setPWM(i);
+        delay(10);
+      }
 
-    motor_speed = 125;
+      potentiometer_value = analogRead(potentiometer_pin);
+      degree = convertToDegrees(potentiometer_value);
+      checker = checkLimit(degree);
+
+      motor_speed = 125;
+    }
   } else if (checker == -1) {
     Serial.println("Lower limit reached! Speeding up...");
 
-    for(int i = motor_speed; i <= 125; i++) {
-      setPWM(i);
-      delay(10);
-    }
+    while(checker == -1){
+      for(int i = motor_speed; i <= 125; i++) {
+        setPWM(i);
+        delay(10);
+      }
 
-    motor_speed = 125;
+      potentiometer_value = analogRead(potentiometer_pin);
+      degree = convertToDegrees(potentiometer_value);
+      checker = checkLimit(degree);
+      
+      motor_speed = 125;
+    }
   } else {
     if (motor_speed < 50) {
       setPWM(0);
