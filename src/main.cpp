@@ -64,14 +64,14 @@ void loop() {
 
   int checker = checkLimit(degree);
 
-  int motor_speed = map(degree, 0, 180, 0, 255);
+  int motor_speed = map(degree, 0, 180, 200, 255);
 
   // VELOCITY CONTROL LOGIC
   if (checker == 1) {
     Serial.println("Upper limit reached! Slowing down...");
 
     while(checker == 1) {
-      for(int i = motor_speed; i >= 125; i--) {
+      for(int i = motor_speed; i >= 215; i--) {
         setPWM(i);
         delay(10);
       }
@@ -80,13 +80,13 @@ void loop() {
       degree = convertToDegrees(potentiometer_value);
       checker = checkLimit(degree);
 
-      motor_speed = 125;
+      motor_speed = 215;
     }
   } else if (checker == -1) {
     Serial.println("Lower limit reached! Speeding up...");
 
     while(checker == -1){
-      for(int i = motor_speed; i <= 125; i++) {
+      for(int i = motor_speed; i <= 235; i++) {
         setPWM(i);
         delay(10);
       }
@@ -95,7 +95,7 @@ void loop() {
       degree = convertToDegrees(potentiometer_value);
       checker = checkLimit(degree);
       
-      motor_speed = 125;
+      motor_speed = 235;
     }
   } else {
     if (motor_speed < 50) {
@@ -146,10 +146,10 @@ void setMotor(int target_pwm) {
   if (!motor_running && target_pwm > 0) {
     Serial.println("Starting motor with soft start...");
     
-    setPWM(190);
+    setPWM(210);
     delay(100);
     
-    for (int i = 190; i >= target_pwm; i--) {
+    for (int i = 210; i >= target_pwm; i--) {
       setPWM(i);
       delay(10);
     }
