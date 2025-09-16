@@ -1,162 +1,98 @@
-#include <Arduino.h>
+// --- Bibliotecas ---
+#include <ESP32Servo.h>
 
-//LIMITS TO MAINTAIN THE AEROPENDULUM
-#define UPPER_LIMIT 109
-#define LOWER_LIMIT 77
+// --- Configurações de Hardware ---
+const int PINO_POTENCIOMETRO = 34; // Pino ADC para ler o ângulo
+const int PINO_ESC_SINAL = 23;   // Pino para o sinal de controle do ESC
 
-//DELAY
-#define DELAY_TIME 50
+// --- Parâmetros de Controle PID ---
+const float Kp = 0.5;
+const float Ki = 0.06;
+const float Kd = 0.9;
 
-//CONSTANTS
-const int motor_ena = 25; // ENA pin PWM velocity control
-const int motor_in1 = 26; // IN1 pin
-const int motor_in2 = 27; // IN2 
-const int led_pin = 2;
-const int potentiometer_pin = 32;
+// --- Ponto de Operação (Setpoint) ---
+const float setpoint_angulo = 90.0;
+const int pulse_equilibrio = 1100;
 
+// --- Calibração do Sensor (Potenciômetro) ---
+const int POT_MIN = 0;
+const int POT_MAX = 4095;
+const float ANGULO_MIN = 0.0;
+const float ANGULO_MAX = 364.0;
 
-//PWM SETTINGS
-const int pwm_channel = 0;
-const int pwm_frequency = 5000;
-const int pwm_resolution = 8; // 8 bits (0-255)
+// --- Variáveis Globais ---
+Servo motor_esc;
+float erro_anterior = 0;
+float acumulador_erro = 0;
+unsigned long tempo_anterior = 0;
 
-//GLOBAL VARIABLE
-int current_pwm_value = 0;
-bool motor_running = false;
-
-//FUNCTION DECLARATIONS
-float convertToDegrees(int analog_result);
-int checkLimit(float degree_to_check);
-void setPWM(int pwm_value);
-void setMotor(int target_pwm); 
+float lerAngulo();
 
 void setup() {
   Serial.begin(115200);
-  analogReadResolution(12);
+  Serial.println("Controlador PID para Motor Brushless Iniciado.");
 
-  ledcSetup(pwm_channel, pwm_frequency, pwm_resolution);
+  pinMode(PINO_POTENCIOMETRO, INPUT);
 
-  ledcAttachPin(motor_ena, pwm_channel);
+  // IMPORTANTE: CUIDADO AO SETAR A VELOCIDADE MAXIMA DO MOTOR
+  // Setado em 1450 por seguranca!
+  motor_esc.attach(PINO_ESC_SINAL, 1000, 1450);
 
-  pinMode(potentiometer_pin, INPUT);
-  pinMode(led_pin, OUTPUT);
-  pinMode(motor_in1, OUTPUT);
-  pinMode(motor_in2, OUTPUT);
+  // --- SEQUÊNCIA DE ARME DO ESC ---
+  Serial.println("Armando o ESC... Enviando sinal mínimo (1000us).");
+  Serial.println("ATENÇÃO: Mantenha a hélice livre de obstruções!");
+  motor_esc.writeMicroseconds(1000);
+  delay(7000);
+  
+  Serial.println("ESC armado. O controle está ativo.");
 
-  digitalWrite(motor_in1, HIGH);
-  digitalWrite(motor_in2, LOW);
+  tempo_anterior = millis();
 }
 
 void loop() {
-  digitalWrite(led_pin, HIGH);
+  // --- CÁLCULO DO TEMPO (dt) ---
+  unsigned long tempo_atual = millis();
+  float dt = (tempo_atual - tempo_anterior) / 1000.0;
+  if (dt <= 0) dt = 0.001;
+  tempo_anterior = tempo_atual;
 
-  int potentiometer_value = analogRead(potentiometer_pin);
-  if(potentiometer_value < 0 || potentiometer_value > 4095) {
-    Serial.println("Invalid analog value!");
-    return;
-  }
+  // --- LEITURA DO SENSOR E CÁLCULO DO ERRO ---
+  float angulo_atual = lerAngulo();
+  float erro = setpoint_angulo - angulo_atual;
 
-  float degree = convertToDegrees(potentiometer_value);
-  if(degree < 0 || degree > 180) {
-    Serial.println("Invalid degree value!");
-    return;
-  }
-
-  int checker = checkLimit(degree);
-
-  int motor_speed = map(degree, 0, 180, 200, 255);
-
-  // VELOCITY CONTROL LOGIC
-  if (checker == 1) {
-    Serial.println("Upper limit reached! Slowing down...");
-
-    while(checker == 1) {
-      for(int i = motor_speed; i >= 215; i--) {
-        setPWM(i);
-        delay(10);
-      }
-
-      potentiometer_value = analogRead(potentiometer_pin);
-      degree = convertToDegrees(potentiometer_value);
-      checker = checkLimit(degree);
-
-      motor_speed = 215;
-    }
-  } else if (checker == -1) {
-    Serial.println("Lower limit reached! Speeding up...");
-
-    while(checker == -1){
-      for(int i = motor_speed; i <= 235; i++) {
-        setPWM(i);
-        delay(10);
-      }
-
-      potentiometer_value = analogRead(potentiometer_pin);
-      degree = convertToDegrees(potentiometer_value);
-      checker = checkLimit(degree);
-      
-      motor_speed = 235;
-    }
-  } else {
-    if (motor_speed < 50) {
-      setPWM(0);
-      motor_running = false;
-    } else {
-      setMotor(motor_speed);
-    }
-  }
-
-  Serial.print("Degree: ");
-  Serial.print(degree);
-  Serial.print("  |  Velocidade do Motor: ");
-  Serial.println(motor_speed);
-
-  delay(DELAY_TIME);
-
-  digitalWrite(led_pin, LOW);
-  delay(DELAY_TIME);
-}
-
-//FUNCTION LOGICS
-float convertToDegrees(int analog_result){
-  float degrees = map(analog_result, 0, 4095, 0, 180);  // 0° to 180°
-
-  return degrees;
-}
-
-int checkLimit(float degree_to_check){
-  if(degree_to_check >= UPPER_LIMIT) return 1;
-  if(degree_to_check <= LOWER_LIMIT) return -1;
-
-  return 0;
-}
-
-void setPWM(int pwm_value) {
-  ledcWrite(pwm_channel, pwm_value);
-  current_pwm_value = pwm_value;
+  // --- CÁLCULO DAS CONSTANTES PID ---
+  float termo_P = Kp * erro;
+  acumulador_erro += erro * dt;
+  float termo_I = Ki * acumulador_erro;
+  float derivada_erro = (erro - erro_anterior) / dt;
+  float termo_D = Kd * derivada_erro;
   
-  if (pwm_value > 0) {
-    motor_running = true;
-  } else {
-    motor_running = false;
-  }
+  // --- CÁLCULO DA AÇÃO DE CONTROLE ---
+  float delta_pulse = termo_P + termo_I + termo_D;
+
+  int pulse_final = pulse_equilibrio + delta_pulse;
+
+  // --- 5. SATURAÇÃO DO ATUADOR (Anti-Windup) ---
+  // Limita o pulso final para a faixa válida do ESC.
+  pulse_final = constrain(pulse_final, 1000, 1450); //IMPORTANTE: Valor maximo de pulse_final deve ser igual o maximo do motor!
+
+  // --- 6. ATUAÇÃO ---
+  motor_esc.writeMicroseconds(pulse_final);
+
+  // --- 7. ATUALIZAÇÃO E DEBUG ---
+  erro_anterior = erro;
+
+  // Imprime os dados no Serial Plotter
+  Serial.print("Angulo: "); Serial.print(angulo_atual);
+  Serial.print("  Erro: "); Serial.print(erro);
+  Serial.print("  Delta: "); Serial.print(delta_pulse);
+  Serial.print("  Pulso: "); Serial.println(pulse_final);
+
+  delay(10); 
 }
 
-void setMotor(int target_pwm) {
-  if (!motor_running && target_pwm > 0) {
-    Serial.println("Starting motor with soft start...");
-    
-    setPWM(210);
-    delay(100);
-    
-    for (int i = 210; i >= target_pwm; i--) {
-      setPWM(i);
-      delay(10);
-    }
-    
-    Serial.print("Motor started, now running at PWM: ");
-    Serial.println(target_pwm);
-  } else {
-    setPWM(target_pwm);
-  }
+float lerAngulo() {
+  int valor_adc = analogRead(PINO_POTENCIOMETRO);
+  float angulo = map(valor_adc, POT_MIN, POT_MAX, ANGULO_MAX, ANGULO_MIN);
+  return constrain(angulo, ANGULO_MIN, ANGULO_MAX);
 }

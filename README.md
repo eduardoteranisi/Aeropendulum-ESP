@@ -1,3 +1,4 @@
+# [OUTDATED README]
 # Project: Aeropendulum with a microcontroller
 
 This project uses the board **ESP32 DEVKIT V1**.
