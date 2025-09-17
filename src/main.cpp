@@ -24,9 +24,15 @@ const float ANGULO_MAX = 364.0;
 Servo motor_esc;
 float erro_anterior = 0;
 float acumulador_erro = 0;
+float derivada_filtrada_anterior = 0;
+
+int index_teste = 0;
+
+const float ALFA_FILTRO_D = 0.2;
+
 unsigned long tempo_anterior = 0;
 
-float lerAngulo();
+int lerAngulo(int index);
 
 void setup() {
   Serial.begin(115200);
@@ -57,7 +63,12 @@ void loop() {
   tempo_anterior = tempo_atual;
 
   // --- LEITURA DO SENSOR E CÁLCULO DO ERRO ---
-  float angulo_atual = lerAngulo();
+  if(index_teste == 10) {
+    index_teste = 0;
+  }
+  float angulo_atual = lerAngulo(index_teste);
+  index_teste++;
+
   float erro = setpoint_angulo - angulo_atual;
 
   // --- CÁLCULO DAS CONSTANTES PID ---
@@ -68,7 +79,8 @@ void loop() {
 
   float termo_I = Ki * acumulador_erro;
   float derivada_erro = (erro - erro_anterior) / dt;
-  float termo_D = Kd * derivada_erro;
+  float derivada_filtrada = (ALFA_FILTRO_D * derivada_erro) + (1.0 - ALFA_FILTRO_D) * derivada_filtrada_anterior;
+  float termo_D = Kd * derivada_filtrada;
   
   // --- CÁLCULO DA AÇÃO DE CONTROLE ---
   float delta_pulse = termo_P + termo_I + termo_D;
@@ -84,19 +96,28 @@ void loop() {
 
   // --- 7. ATUALIZAÇÃO E DEBUG ---
   erro_anterior = erro;
+  derivada_filtrada_anterior = derivada_filtrada;
 
   // Imprime os dados no Serial Plotter
   Serial.print("Angulo: "); Serial.print(angulo_atual);
-  Serial.print("Acumulador: "); Serial.print(acumulador_erro);
-  Serial.print("  Erro: "); Serial.print(erro);
+  Serial.print(" Termo p: "); Serial.print(termo_P);
+  Serial.print(" Termo i: "); Serial.print(termo_I);
+  Serial.print(" Termo d: "); Serial.print(termo_D);
+  Serial.print(" Acumulador: "); Serial.print(acumulador_erro);
+
   Serial.print("  Delta: "); Serial.print(delta_pulse);
+  Serial.print("  Erro: "); Serial.print(erro);
   Serial.print("  Pulso: "); Serial.println(pulse_final);
 
   delay(10); 
 }
 
-float lerAngulo() {
-  int valor_adc = analogRead(PINO_POTENCIOMETRO);
-  float angulo = map(valor_adc, POT_MIN, POT_MAX, ANGULO_MAX, ANGULO_MIN);
-  return constrain(angulo, ANGULO_MIN, ANGULO_MAX);
+int lerAngulo(int index) {
+  // int valor_adc = analogRead(PINO_POTENCIOMETRO);
+  // float angulo = map(valor_adc, POT_MIN, POT_MAX, ANGULO_MAX, ANGULO_MIN);
+  // return constrain(angulo, ANGULO_MIN, ANGULO_MAX);
+
+  int test_degrees[10] = {50,60,70,80,90,95,93,100,130,15};
+
+  return test_degrees[index];
 }
