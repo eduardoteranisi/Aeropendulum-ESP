@@ -6,12 +6,15 @@ const int PINO_POTENCIOMETRO = 34; // Pino ADC para ler o ângulo
 const int PINO_ESC_SINAL = 23;   // Pino para o sinal de controle do ESC
 
 // --- Parâmetros de Controle PID ---
-const float Kp = 0.6;
-const float Ki = 0.009;
-const float Kd = 1.1;
+const float Kp = 0.9762;
+const float Ki = 0.1463;
+const float Kd = 1.6282;
+
+const float ALFA_FILTRO = 0.2;
+float derivada_filtrada_anterior = 0;
 
 // --- Ponto de Operação (Setpoint) ---
-const float setpoint_angulo = 90.0;
+const float setpoint_angulo = 60.0;
 const int pulse_equilibrio = 1100;
 
 // --- Calibração do Sensor (Potenciômetro) ---
@@ -34,9 +37,7 @@ void setup() {
 
   pinMode(PINO_POTENCIOMETRO, INPUT);
 
-  // IMPORTANTE: CUIDADO AO SETAR A VELOCIDADE MAXIMA DO MOTOR
-  // Setado em 1450 por seguranca!
-  motor_esc.attach(PINO_ESC_SINAL, 1000, 1450);
+  motor_esc.attach(PINO_ESC_SINAL, 1000, 1300);
 
   // --- SEQUÊNCIA DE ARME DO ESC ---
   Serial.println("Armando o ESC... Enviando sinal mínimo (1000us).");
@@ -63,12 +64,20 @@ void loop() {
   // --- CÁLCULO DAS CONSTANTES PID ---
   float termo_P = Kp * erro;
 
-  acumulador_erro += erro * dt;
-  acumulador_erro = constrain(acumulador_erro, -300, 300); //REVISAR ESSE VALOR DE 300 COMO LIMITE
+  float derivada_erro = (erro - erro_anterior) / dt;
+  float derivada_filtrada = (ALFA_FILTRO * derivada_erro) + (1.0 - ALFA_FILTRO) * derivada_filtrada_anterior; 
+
+  float termo_D = Kd * derivada_filtrada;
+  
+  float tentativa_delta = termo_P + termo_D + Ki * acumulador_erro;
+  int tentativa_pulse = pulse_equilibrio + tentativa_delta;
+
+  // --- checa saturação antes de integrar ---
+  if ((tentativa_pulse > 1000) && (tentativa_pulse < 1300)) {
+      acumulador_erro += erro * dt;
+  }
 
   float termo_I = Ki * acumulador_erro;
-  float derivada_erro = (erro - erro_anterior) / dt;
-  float termo_D = Kd * derivada_erro;
   
   // --- CÁLCULO DA AÇÃO DE CONTROLE ---
   float delta_pulse = termo_P + termo_I + termo_D;
@@ -77,7 +86,7 @@ void loop() {
 
   // --- 5. SATURAÇÃO DO ATUADOR (Anti-Windup) ---
   // Limita o pulso final para a faixa válida do ESC.
-  pulse_final = constrain(pulse_final, 1000, 1450); //IMPORTANTE: Valor maximo de pulse_final deve ser igual o maximo do motor!
+  pulse_final = constrain(pulse_final, 1000, 1300);
 
   // --- 6. ATUAÇÃO ---
   motor_esc.writeMicroseconds(pulse_final);
@@ -87,7 +96,6 @@ void loop() {
 
   // Imprime os dados no Serial Plotter
   Serial.print("Angulo: "); Serial.print(angulo_atual);
-  Serial.print("Acumulador: "); Serial.print(acumulador_erro);
   Serial.print("  Erro: "); Serial.print(erro);
   Serial.print("  Delta: "); Serial.print(delta_pulse);
   Serial.print("  Pulso: "); Serial.println(pulse_final);
