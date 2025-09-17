@@ -6,9 +6,9 @@ const int PINO_POTENCIOMETRO = 34; // Pino ADC para ler o ângulo
 const int PINO_ESC_SINAL = 23;   // Pino para o sinal de controle do ESC
 
 // --- Parâmetros de Controle PID ---
-const float Kp = 0.5;
-const float Ki = 0.06;
-const float Kd = 0.9;
+const float Kp = 0.6;
+const float Ki = 0.009;
+const float Kd = 1.1;
 
 // --- Ponto de Operação (Setpoint) ---
 const float setpoint_angulo = 90.0;
@@ -62,7 +62,10 @@ void loop() {
 
   // --- CÁLCULO DAS CONSTANTES PID ---
   float termo_P = Kp * erro;
+
   acumulador_erro += erro * dt;
+  acumulador_erro = constrain(acumulador_erro, -300, 300); //REVISAR ESSE VALOR DE 300 COMO LIMITE
+
   float termo_I = Ki * acumulador_erro;
   float derivada_erro = (erro - erro_anterior) / dt;
   float termo_D = Kd * derivada_erro;
@@ -84,6 +87,7 @@ void loop() {
 
   // Imprime os dados no Serial Plotter
   Serial.print("Angulo: "); Serial.print(angulo_atual);
+  Serial.print("Acumulador: "); Serial.print(acumulador_erro);
   Serial.print("  Erro: "); Serial.print(erro);
   Serial.print("  Delta: "); Serial.print(delta_pulse);
   Serial.print("  Pulso: "); Serial.println(pulse_final);
